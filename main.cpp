@@ -148,6 +148,9 @@ struct Rope {
     };
 
     Rope(NodePtr root): root(root) { rebalance(); }
+    Rope(const vector<NodePtr> &nodes) {
+        root = merge(nodes, 0, nodes.size());
+    }
 
     inline char operator[](size_t idx) {
         assert(idx < root->length && "Out of range");
@@ -212,6 +215,20 @@ struct Rope {
         rebalance();
     }
 
+    inline void erase(size_t idx, size_t len) {
+        assert(idx < this->root->length && "Start index out of range");
+        assert(idx + len <= this->root->length && "Out of bound");
+        if (len == 0) return;
+        if (idx == 0) {
+            Rope right_part = split(len);
+            this->root = right_part.root;
+        } else {
+            Rope temp = split(idx);
+            Rope right_part = temp.split(len);
+            concat(right_part);
+        }
+    }
+
     inline void insert(size_t idx, const string &s) {
         if (idx == 0) prepend(s);
         else if (idx == length()) append(s);
@@ -272,9 +289,9 @@ int main() {
 
     Rope rope(root);
     cout << "\"" << rope.to_str() << "\"\n";
-    rope.insert(0, "Just checking, ");
+    rope.erase(rope.length()-1, 0);
     cout << "\"" << rope.to_str() << "\"\n";
-    rope.insert(rope.length()-6, ", Just checking");
+    rope.insert(6, "**********");
     cout << "\"" << rope.to_str() << "\"\n";
     return 0;
 }
