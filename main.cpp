@@ -192,6 +192,7 @@ struct Rope {
                 else ptr = ptr->right;
             }
         }
+        rebalance();
     }
 
     inline void append(const string &s) {
@@ -208,6 +209,7 @@ struct Rope {
                 else ptr = ptr->left;
             }
         }
+        rebalance();
     }
 
     inline void insert(size_t idx, const string &s) {
@@ -218,7 +220,6 @@ struct Rope {
             append(s);
             concat(right_part);
         }
-        rebalance();
     }
 
     inline string to_str() {
