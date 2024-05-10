@@ -1,6 +1,7 @@
-#include <cstdio>
 #include <string>
+#include <iostream>
 #include <optional>
+#include <sstream>
 #include <cassert>
 #include <vector>
 #include <stack>
@@ -9,14 +10,15 @@ using namespace std;
 
 struct Rope {
     struct Node {
+        using NodePtr = shared_ptr<Node>;
         size_t weight;
         size_t height;
         size_t length;
-        shared_ptr<Node>left, right;
+        NodePtr left, right;
         optional<string> data;
 
         // construct non-leave node
-        Node(shared_ptr<Node> left, shared_ptr<Node> right):
+        Node(NodePtr left, NodePtr right):
             weight(left->length), height(left->height+1), length(left->length), left(left), right(right), data() {
             assert(left != nullptr && "A non-leave node must have at least a left child");
             if (right != nullptr) {
@@ -34,6 +36,26 @@ struct Rope {
             return left->at(idx);
         }
 
+        inline void split(size_t idx, vector<NodePtr> &orphans) {
+            if (is_leave()) {
+                assert(idx != 0 && idx < length);
+                NodePtr n_right = make_shared<Node>(data.value().substr(idx));
+                orphans.push_back(n_right);
+                left = make_shared<Node>(data.value().substr(0, idx));
+                data = nullopt;
+            } else if (idx < weight) {
+                left->split(idx, orphans);
+                if (right != nullptr) orphans.push_back(right);
+                right = nullptr;
+            } else if (idx == weight) {
+                assert(right != nullptr);
+                orphans.push_back(right);
+                right = nullptr;
+            } else {
+                right->split(idx-weight, orphans);
+            }
+        }
+
         inline bool is_balanced() {
             int lh = left == nullptr ? 0 : left->height;
             int rh = right == nullptr ? 0 : right->height;
@@ -47,19 +69,19 @@ struct Rope {
 
         inline bool is_leave() { return data != nullopt; }
     };
+    using NodePtr = shared_ptr<Node>;
 
     struct LeaveIterator {
         struct Iterator {
             using iterator_category = std::forward_iterator_tag;
             using difference_type = std::ptrdiff_t;
             using value_type = Rope::Node;
-            using pointer = shared_ptr<Rope::Node>;
+            using pointer = NodePtr;
             using reference = Rope::Node&;
             reference operator*() const { return *m_ptr; }
             pointer operator->() { return m_ptr; }
 
-
-            Iterator& operator++() {
+            inline void next() {
                 if (stck.size() == 0) {
                     m_ptr = nullptr;
                 } else {
@@ -70,9 +92,14 @@ struct Rope {
                         stck.push(node);
                         node = node->left;
                     }
-                    // assert(node != nullptr && "Can't have hanging non-leave node");
-                    m_ptr= node;
+                    m_ptr = node;
                 }
+            }
+
+            Iterator& operator++() {
+                do {
+                    next();
+                } while (stck.size() > 0 && m_ptr == nullptr);
                 return *this;
             }
 
@@ -95,15 +122,15 @@ struct Rope {
             pointer m_ptr;
         };
 
-        LeaveIterator(shared_ptr<Node> root): stck() {
+        LeaveIterator(NodePtr root): stck() {
             while (root != nullptr) {
                 stck.push(root);
                 root = root->left;
             }
         }
 
-        Iterator begin() {
-            shared_ptr<Node> top = stck.top();
+        inline Iterator begin() {
+            NodePtr top = stck.top();
             Iterator result(stck, top);
             stck.pop();
             top = top->right;
@@ -114,15 +141,13 @@ struct Rope {
             return result;
         }
 
-        Iterator end() {
-            return Iterator(stck, nullptr);
-        }
+        inline Iterator end() { return Iterator(stck, nullptr); }
 
     private:
-        stack<shared_ptr<Node>> stck;
+        stack<NodePtr> stck;
     };
 
-    Rope(shared_ptr<Node> root): root(root) {}
+    Rope(NodePtr root): root(root) { rebalance(); }
 
     inline char operator[](size_t idx) {
         assert(idx < root->length && "Out of range");
@@ -133,7 +158,7 @@ struct Rope {
 
     inline void rebalance() {
         if (!root->is_balanced()) {
-            vector<shared_ptr<Node>> leaves = this->leaves();
+            vector<NodePtr> leaves = this->leaves();
             root = merge(leaves, 0, leaves.size());
         }
     }
@@ -143,20 +168,78 @@ struct Rope {
         rebalance();
     }
 
+    inline Rope split(size_t idx) {
+        vector<NodePtr> orphans;
+        root->split(idx, orphans);
+        NodePtr root = merge(orphans, 0, orphans.size());
+        rebalance();
+        Rope result(root);
+        result.rebalance();
+        return result;
+    }
+
+    inline void prepend(const string &s) {
+        NodePtr ptr = root;
+        while (ptr != nullptr) {
+            if (ptr->is_leave()) {
+                ptr->left = make_shared<Node>(s);
+                ptr->right = make_shared<Node>(ptr->data.value());
+                ptr->data = nullopt;
+                break;
+            } else {
+                assert((ptr->left != nullptr || ptr->right != nullptr) && "Invalid non-leave node");
+                if (ptr->left != nullptr) ptr = ptr->left;
+                else ptr = ptr->right;
+            }
+        }
+    }
+
+    inline void append(const string &s) {
+        NodePtr ptr = root;
+        while (ptr != nullptr) {
+            if (ptr->is_leave()) {
+                ptr->left = make_shared<Node>(ptr->data.value());
+                ptr->right = make_shared<Node>(s);
+                ptr->data = nullopt;
+                break;
+            } else {
+                assert((ptr->left != nullptr || ptr->right != nullptr) && "Invalid non-leave node");
+                if (ptr->right != nullptr) ptr = ptr->right;
+                else ptr = ptr->left;
+            }
+        }
+    }
+
+    inline void insert(size_t idx, const string &s) {
+        if (idx == 0) prepend(s);
+        else if (idx == length()) append(s);
+        else {
+            Rope right_part = split(idx);
+            append(s);
+            concat(right_part);
+        }
+        rebalance();
+    }
+
+    inline string to_str() {
+        stringstream ss;
+        for (const Node &ptr : leaves_iter()) ss << ptr.data.value();
+        return ss.str();
+    }
 
     inline LeaveIterator leaves_iter() { return LeaveIterator(root); }
-    inline vector<shared_ptr<Node>> leaves() {
-        vector<shared_ptr<Node>> nodes;
+    inline vector<NodePtr> leaves() {
+        vector<NodePtr> nodes;
         for (const Node &ptr : LeaveIterator(root)) {
             nodes.push_back(make_shared<Node>(ptr.data.value()));
         }
         return nodes;
     }
 
-    shared_ptr<Node> root;
+    NodePtr root;
 
 private:
-    static shared_ptr<Node> merge(const vector<shared_ptr<Node>> &leaves, size_t start, size_t end) {
+    static NodePtr merge(const vector<NodePtr> &leaves, size_t start, size_t end) {
         if (end <= start) return nullptr;
 
         size_t range = end - start;
@@ -171,30 +254,26 @@ private:
 
 
 int main() {
-    shared_ptr<Rope::Node>n1 = make_shared<Rope::Node>("Hello ");
-    shared_ptr<Rope::Node>n2 = make_shared<Rope::Node>("world");
-    shared_ptr<Rope::Node>p1_2 = make_shared<Rope::Node>(n1, n2);
+    Rope::NodePtr n1 = make_shared<Rope::Node>("Hello ");
+    Rope::NodePtr n2 = make_shared<Rope::Node>("world");
+    Rope::NodePtr p1_2 = make_shared<Rope::Node>(n1, n2);
 
-    shared_ptr<Rope::Node>n3 = make_shared<Rope::Node>(" ,How ");
-    shared_ptr<Rope::Node>n4 = make_shared<Rope::Node>("are yo");
-    shared_ptr<Rope::Node>p3_4 = make_shared<Rope::Node>(n3, n4);
+    Rope::NodePtr n3 = make_shared<Rope::Node>(" ,How ");
+    Rope::NodePtr n4 = make_shared<Rope::Node>("are yo");
+    Rope::NodePtr p3_4 = make_shared<Rope::Node>(n3, n4);
 
-    shared_ptr<Rope::Node>pp = make_shared<Rope::Node>(p1_2, p3_4);
+    Rope::NodePtr pp = make_shared<Rope::Node>(p1_2, p3_4);
 
-    shared_ptr<Rope::Node>n5 = make_shared<Rope::Node>("u today");
-    shared_ptr<Rope::Node>p5 = make_shared<Rope::Node>(n5, nullptr);
+    Rope::NodePtr n5 = make_shared<Rope::Node>("u today");
+    Rope::NodePtr p5 = make_shared<Rope::Node>(n5, nullptr);
 
-    shared_ptr<Rope::Node>root = make_shared<Rope::Node>(pp, p5);
+    Rope::NodePtr root = make_shared<Rope::Node>(pp, p5);
 
     Rope rope(root);
-    rope.rebalance();
-
-    for (const Rope::Node &ptr : rope.leaves_iter()) {
-        printf("%.*s", (int)ptr.weight, ptr.data.value().data());
-    }
-    printf("\n");
-    for (size_t i = 0; i < rope.length(); i++) {
-        printf("Char at %zu: %c\n", i, rope[i]);
-    }
+    cout << "\"" << rope.to_str() << "\"\n";
+    rope.insert(0, "Just checking, ");
+    cout << "\"" << rope.to_str() << "\"\n";
+    rope.insert(rope.length()-6, ", Just checking");
+    cout << "\"" << rope.to_str() << "\"\n";
     return 0;
 }
