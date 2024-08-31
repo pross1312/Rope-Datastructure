@@ -176,8 +176,8 @@ struct Rope {
         while (!ptr->is_leave()) {
             if (idx < ptr->weight) ptr = ptr->left;
             else {
-                ptr = ptr->right;
                 idx -= ptr->weight;
+                ptr = ptr->right;
             }
         }
         return ptr->data[idx];
