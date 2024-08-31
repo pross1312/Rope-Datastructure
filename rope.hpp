@@ -185,7 +185,7 @@ struct Rope {
 
     inline void concat(shared_ptr<Node> that_root) {
         this->root = make_shared<Node>(this->root, that_root);
-        rebalance();
+        // rebalance();
     }
 
     inline shared_ptr<Node> split(size_t idx) {
@@ -196,10 +196,10 @@ struct Rope {
     }
 
     inline void rebalance() { // this make rope every operation really slow -_-, not sure it's needed
-        // if (!root->is_balanced()) {
-        //     vector<shared_ptr<Node>> leaves = this->leaves();
-        //     root = merge(leaves, 0, leaves.size());
-        // }
+        if (!root->is_balanced()) {
+            vector<shared_ptr<Node>> leaves = this->leaves();
+            root = merge(leaves, 0, leaves.size());
+        }
     }
 
    inline void erase(size_t idx, size_t len) {
@@ -235,7 +235,7 @@ struct Rope {
             concat(right_part);
             return;
         }
-        rebalance();
+        // rebalance();
     }
 
 

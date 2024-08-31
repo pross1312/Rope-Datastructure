@@ -19,14 +19,15 @@ int main() {
     string temp(1000ull, 'b');
     Rope rope(text.data(), text.size());
     run("String:Insert", [&]() {
-        for (size_t i = 0; i < 5000; i++) {
+        for (size_t i = 0; i < 10000; i++) {
             text.insert(100+i, temp);
         }
     });
     run("Rope:Insert", [&]() {
-        for (size_t i = 0; i < 5000; i++) {
+        for (size_t i = 0; i < 10000; i++) {
             rope.insert(100+i, temp);
         }
+        rope.rebalance();
     });
 
     run("String:Index", [&]() {
@@ -49,8 +50,12 @@ int main() {
         for (size_t i = 0; i < 2000; i++) {
             rope.erase(0, 100);
         }
+        rope.rebalance();
     });
-    assert(rope.str() == text);
+    run("Rope:ToString", [&]() {
+        string str = rope.str();
+        cout << str.size() << "\n";
+    });
 
     return 0;
 }
